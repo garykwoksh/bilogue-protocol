@@ -1,11 +1,13 @@
 # Bilogue Protocol
 
-> **AI-to-AI 通信協定，帶人類批准位（Consent Gate）。**
+> 🌐 [繁體中文](README.zh-TW.md)
+
+> **An AI-to-AI communication protocol with a human Consent Gate.**
 >
-> 核心論點：**模型係引擎，Agent ID 係電話號碼。** 轉 model = 換引擎，號碼唔使換。
+> Core thesis: **the model is the engine, the Agent ID is the phone number.** Swap the engine, keep the number.
 >
-> **定位：Bilogue 唔係要取代 MCP、A2A 等大標準，而係佢哋之上嘅「人類批准＋稽核治理層」。**
-> MCP 解決 agent 點樣用工具，A2A 解決 agent 之間點樣傳訊息——但冇一個標準規定「部機真係做嘢之前，要有個人撳掣」。Bilogue 就係補呢個位：任何 agent 喺執行有副作用嘅動作之前，都要經過 Consent Gate；做完嘅嘢，全部寫入 append-only audit log，方便事後追查。
+> **Positioning: Bilogue is not trying to replace major standards like MCP or A2A — it is a "human approval + audit governance layer" on top of them.**
+> MCP standardizes how agents use tools; A2A standardizes how agents message each other — but no standard mandates that *a human presses a button before the machine actually does something*. Bilogue fills that gap: before any agent executes a side-effecting action, it must pass through the Consent Gate; everything executed is written to an append-only audit log for post-hoc investigation.
 
 [![Tests](https://img.shields.io/badge/tests-99%20security--regression-passing-brightgreen)]()
 [![Fuzz](https://img.shields.io/badge/fuzz-600%20iters%200%20crash-brightgreen)]()
@@ -15,40 +17,40 @@
 
 > **WARNING: This is an EXPERIMENTAL PROTOTYPE. It HAS been self-security-audited by the project author (3 rounds, 20 findings: P0×8 / P1×8 / P2×4 — all fixed in v0.3.3), but it has NOT been audited by an independent third party and is NOT certified production-ready.** LAN / Internet deployment REQUIRES TLS (`--tls-cert` / `--tls-key`; binding to a non-loopback interface without TLS is now **refused**). See [SECURITY.md](SECURITY.md) for residual risks.
 
-## 這是什麼？
+## What is this?
 
-Bilogue 是一個讓多個 AI Agent 互相通訊的協定和參考實作。它不解決「AI 能不能對話」的問題（那是幾十行 code 的事），而是把這些膠水**標準化**：
+Bilogue is a protocol and reference implementation for AI agents to communicate with each other. It doesn't solve "can AIs talk to each other" (that's a few dozen lines of code) — it **standardizes** the glue:
 
-| 層 | 解決的問題 | 實作 |
+| Layer | Problem solved | Implementation |
 |---|---|---|
-| **Identity** | 誰是誰？模型換了怎麼辦？ | Agent ID + HMAC 簽名，ACL 認 ID 不認模型 |
-| **Intent** | AI 之間講什麼？格式是什麼？ | Intent Envelope：DELEGATE → PROPOSE → ACCEPT → REPORT |
-| **Consent** | 人類在哪裡批准？ | Consent Gate：每條外部通信彈出 y/n，`stop` 即 kill-switch |
-| **Audit** | 出了事怎麼查？ | JSONL append-only audit log |
+| **Identity** | Who is who? What if the model changes? | Agent ID + HMAC signatures; ACLs bind to IDs, not models |
+| **Intent** | What do AIs say to each other? In what format? | Intent Envelope: DELEGATE → PROPOSE → ACCEPT → REPORT |
+| **Consent** | Where does the human approve? | Consent Gate: y/n prompt on every external message; `stop` is a kill-switch |
+| **Audit** | How do you investigate when something goes wrong? | JSONL append-only audit log |
 
-## 一鍵跑起來
+## One-command quickstart
 
 ```bash
-# 本地 demo（冇 API key，mock 模式 + 自動批准）
+# Local demo (no API key, mock mode + auto-approve)
 python3 hello_bilogue.py --mock --auto-approve
 
-# 跑安全 + Consent 回歸測試（99 項）
+# Security + Consent regression tests (99 tests)
 python3 test_relay_security.py
 
-# 跑模糊測試（P2-04：600 次畸形請求，要求零 crash / 零 500）
+# Fuzzing (P2-04: 600 malformed requests, requiring zero crashes / zero 500s)
 python3 fuzz_relay.py --iters 600
 
-# 啟動 HTTP Relay Server（預設只綁 localhost，跨 agent 通信）
+# Start the HTTP Relay Server (binds localhost by default, for cross-agent comms)
 python3 bilogue_relay.py --port 8420
 
-# 跨機器部署（必須 TLS；無 TLS 綁非 loopback 會直接拒絕啟動，exit 3）
+# Cross-machine deployment (TLS required; binding non-loopback without TLS refuses to start, exit 3)
 python3 bilogue_relay.py --port 8420 --host 0.0.0.0 \
   --tls-cert /path/fullchain.pem --tls-key /path/privkey.pem
 ```
 
-## 快速上手
+## Quick start
 
-### 1. 兩個 Agent 對話
+### 1. Two agents talking
 
 ```python
 from hello_bilogue import AgentRegistry, MessageBus, ConsentGate, Agent
@@ -57,44 +59,45 @@ registry = AgentRegistry()
 bus = MessageBus()
 gate = ConsentGate(auto_approve=True)
 
-registry.register("karina", "Karina (分析助手)", "mock")
-registry.register("stfund", "St.Fund (核數助手)", "mock")
+registry.register("karina", "Karina (analysis assistant)", "mock")
+registry.register("stfund", "St.Fund (audit assistant)", "mock")
 registry.allow("karina", "stfund")
 
 karina = Agent("karina", "Karina", "mock", registry, bus)
 stfund = Agent("stfund", "St.Fund", "mock", registry, bus)
 
-# Karina 委派 St.Fund
-karina.send("stfund", "DELEGATE", {"task": "Q3 財務分析"}, gate)
+# Karina delegates to St.Fund
+karina.send("stfund", "DELEGATE", {"task": "Q3 financial analysis"}, gate)
 
-# St.Fund 收到，自動回 PROPOSE
-# Karina 收到 PROPOSE，回 ACCEPT
-# St.Fund 收到 ACCEPT，回 REPORT
-# 完成！
+# St.Fund receives it, auto-replies PROPOSE
+# Karina receives PROPOSE, replies ACCEPT
+# St.Fund receives ACCEPT, replies REPORT
+# Done!
 ```
 
-### 2. HTTP Relay（跨機器）
+### 2. HTTP Relay (cross-machine)
 
 ```bash
-# 啟動 relay（設定 admin token）
+# Start the relay (set an admin token)
 python3 bilogue_relay.py --port 8420 --auto-approve --admin-token myAdmin123
 
-# 另一個 terminal：註冊 agent + 發訊息
+# In another terminal: register an agent + send a message
 curl -X POST http://localhost:8420/register \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer myAdmin123" \
   -d '{"agent_id": "karina", "display_name": "Karina"}'
 
-# 拎 inbox（要用 agent 嘅 read_token 認證，v0.2.1 起同簽名 secret 分離；P0-05 起要 ACK）
+# Fetch inbox (authenticated with the agent's read_token; separated from the
+# signing secret since v0.2.1; ACK required since P0-05)
 curl http://localhost:8420/inbox/karina \
   -H "Authorization: Bearer <read_token>"
 
-# 收到後 ACK（P0-05：ACK 之前可安全重取，唔會即刪）
+# ACK after receiving (P0-05: safe to re-fetch before ACK, nothing is deleted early)
 curl -X POST http://localhost:8420/messages/karina/<msg_id>/ack \
   -H "Authorization: Bearer <read_token>"
 ```
 
-### 3. 接真模型
+### 3. Plug in real models
 
 ```bash
 export MOONSHOT_API_KEY=sk-...
@@ -105,150 +108,151 @@ python3 hello_bilogue.py \
   --agent stfund=openai
 ```
 
-支援：Kimi (Moonshot) / OpenAI / Claude / Gemini
+Supported: Kimi (Moonshot) / OpenAI / Claude / Gemini
 
-## Intent 狀態機
+## Intent state machine
 
-> v0.3.1 起 relay 強制執行：回覆必須帶有效 `in_reply_to`，且轉移要合法（否則 400 BAD_STATE）。
+> Since v0.3.1 the relay enforces this: replies must carry a valid `in_reply_to`, and transitions must be legal (otherwise 400 BAD_STATE).
 
 ```
 QUERY    → REPORT / ACCEPT / REJECT
 DELEGATE → PROPOSE / ACCEPT / REJECT / REPORT
 PROPOSE  → ACCEPT / REJECT
 ACCEPT   → REPORT
-REJECT   → QUERY / DELEGATE（可以重新開始）
-REPORT   → QUERY / DELEGATE（任務完成，可以開新）
+REJECT   → QUERY / DELEGATE (can restart)
+REPORT   → QUERY / DELEGATE (task done, can open a new one)
 PING     → REPORT
 ```
 
-## Consent 三級政策（v0.3）
+## Three-level Consent policy (v0.3)
 
-逐條訊息批准最安全但溝通唔暢（仲會令批准者疲勞變橡皮圖章），所以 Consent Gate 而家有三級：
+Per-message approval is the safest but kills throughput (and turns approvers into rubber stamps), so the Consent Gate now has three levels:
 
-| 級別 | 粒度 | 點用 |
+| Level | Granularity | Usage |
 |---|---|---|
-| **L1 逐條批准**（預設） | 每個 envelope 彈批准位 | 唔使設定，預設行為 |
-| **L2 對話鏈同意** | 批准一個任務，後續 PROPOSE/ACCEPT/REPORT 自動放行 | `POST /approve {"msg_id": "...", "scope": "conversation"}`；v0.3.1 起預設係 `once`（最小權限），開鏈要明確寫 |
-| **L3 限時信任窗口** | 一對 agent 喺限期 + 訊息預算內自由通訊 | 見下面 |
+| **L1 per-message approval** (default) | Approval prompt on every envelope | No setup needed, default behavior |
+| **L2 conversation-chain consent** | Approve one task; subsequent PROPOSE/ACCEPT/REPORT auto-pass | `POST /approve {"msg_id": "...", "scope": "conversation"}`; since v0.3.1 the default is `once` (least privilege) — chains must be explicitly opened |
+| **L3 time-boxed trust window** | Two agents communicate freely within a deadline + message budget | See below |
 
 ```bash
-# L3：批准 karina → stfund 未來 30 分鐘內最多 100 條訊息
+# L3: approve up to 100 messages from karina → stfund over the next 30 minutes
 curl -X POST http://localhost:8420/grant -H "Authorization: Bearer <admin>" \
   -H "Content-Type: application/json" \
   -d '{"agent_a": "karina", "agent_b": "stfund", "direction": "a_to_b",
        "ttl_seconds": 1800, "max_messages": 100}'
 
-# 睇活躍窗口 / 提早撤銷
+# List active windows / revoke early
 curl http://localhost:8420/grants -H "Authorization: Bearer <admin>"
 curl -X POST http://localhost:8420/revoke -H "Authorization: Bearer <admin>" \
   -H "Content-Type: application/json" -d '{"grant_id": "grant-xxxx"}'
 ```
 
-風險控制：窗口有 TTL（上限 24h）+ 訊息預算雙上限，隨時可 revoke；所有經窗口/對話鏈放行嘅訊息照落 audit log（`RELAYED_GRANT` / `RELAYED_CONVERSATION`），kill-switch 照舊一刀切。
+Risk controls: windows have both a TTL (max 24h) and a message budget, and can be revoked at any time; all messages relayed under a window/conversation chain still land in the audit log (`RELAYED_GRANT` / `RELAYED_CONVERSATION`), and the kill-switch still cuts everything instantly.
 
-## 安全機制
+## Security mechanisms
 
-| 機制 | 說明 | 測試結果 |
+| Mechanism | Description | Test result |
 |------|------|----------|
-| HMAC 簽名 | 每條 envelope 用 sender 的 secret 簽名，篡改即拒收 | ✓ 401 |
-| Nonce + 時間戳 | replay 防護，nonce 去重 + ±300s 時間窗口（cache 有 TTL 上限） | ✓ 401 |
-| ACL | Agent 之間必須雙向授權先可以通信 | ✓ 403 |
-| Consent Gate | 每條外部通信彈出批准位；**待批准訊息收件人唔會見到**（v0.2.1 修復繞過）；v0.3 起支援三級政策 | ✓ 202 |
-| msg_id 防掉包 | 待批准隊列拒絕重複 msg_id（v0.2.1） | ✓ 409 |
-| Kill-switch | 輸入 `stop` 即時終止所有通信 | ✓ 403 |
-| Inbox 認證 | 獨立 read_token（同簽名 secret 分離）；P0-05 起 delivery + ACK（讀咗未 ACK 可安全重取，唔會即刪）；唔存在嘅 agent 一律 403 防枚舉 | ✓ 403 |
-| Admin Token | 管理端點（register/allow/kill）需要 admin token，constant-time 比較 | ✓ 403 |
-| 註冊保護 | 重複註冊返回 409，secret 只喺首次註冊出現一次（v0.2.1） | ✓ 409 |
-| Request 上限 | body 上限 1MB，超限 413；畸形輸入一律 JSON 錯誤回應（v0.2.1） | ✓ 413/400 |
-| Audit Log | 所有訊息落 JSONL，append-only | ✓ |
+| HMAC signatures | Every envelope is signed with the sender's secret; tampering is rejected | ✓ 401 |
+| Nonce + timestamp | Replay protection: nonce dedup + ±300s time window (cache has a TTL cap) | ✓ 401 |
+| ACL | Two agents must mutually authorize before communicating | ✓ 403 |
+| Consent Gate | Approval prompt on every external message; **pending messages are invisible to the recipient** (bypass fixed in v0.2.1); three-level policy since v0.3 | ✓ 202 |
+| msg_id anti-swap | Pending queue rejects duplicate msg_ids (v0.2.1) | ✓ 409 |
+| Kill-switch | Typing `stop` terminates all communication instantly | ✓ 403 |
+| Inbox auth | Separate read_token (split from the signing secret); delivery + ACK since P0-05 (safe re-fetch before ACK, nothing deleted early); nonexistent agents always get 403 to prevent enumeration | ✓ 403 |
+| Admin token | Admin endpoints (register/allow/kill) require an admin token, constant-time comparison | ✓ 403 |
+| Registration guard | Re-registration returns 409; the secret is only revealed once, at first registration (v0.2.1) | ✓ 409 |
+| Request limits | 1MB body cap, 413 on overflow; malformed input always gets a JSON error response (v0.2.1) | ✓ 413/400 |
+| Audit log | All messages land in JSONL, append-only | ✓ |
 
-> v0.2.0 經外部安全審計發現 14 項問題（含 3 項高危，全部附 PoC），已喺 **v0.2.1** 全部修復。
-> 詳情同逐項對照見 [SECURITY.md](SECURITY.md)；回歸測試：`python3 test_relay_security.py`。
+> An external security audit of v0.2.0 found 14 issues (including 3 high-severity, all with PoCs), all fixed in **v0.2.1**.
+> Details and the item-by-item mapping are in [SECURITY.md](SECURITY.md); regression tests: `python3 test_relay_security.py`.
 
-## v0.3.2 重要安全變更（Round-1 P0，第三輪審計）
+## Key security changes in v0.3.2 (Round-1 P0, third audit round)
 
-第三輪外部審計提出 20 項 finding（P0×8 / P1×8 / P2×4）。**Round-1 已實裝 8 項 P0**：
+The third external audit round raised 20 findings (P0×8 / P1×8 / P2×4). **Round-1 implemented all 8 P0s**:
 
-| P0 | 變更 | 影響 |
+| P0 | Change | Impact |
 |----|------|------|
-| **P0-01** | Relay 預設只綁 `127.0.0.1`；非 loopback 顯眼警告（LAN/Internet 要用 HTTPS） | 唔會再預設暴露去 0.0.0.0 |
-| **P0-02** | Kill-switch 持久化（`relay_state.json`）；restart 仍 STOPPED；新增 `POST /resume`（唔會令舊 grant 復活） | 解決「restart 自動回復正常」 |
-| **P0-03** | 批准前重新驗證（kill / 雙方註冊 / ACL / 簽名 / freshness / pending TTL） | 唔會批准過期/失效訊息 |
-| **P0-04** | 批准綁定不可變 envelope hash；產獨立 `consent_id` | 防止 pending 期間被掉包 |
-| **P0-05** | Inbox 由 read-and-delete 改 delivery + ACK（`POST /messages/{aid}/{mid}/ack`） | 解決「client crash 漏訊息」 |
-| **P0-06** | 所有截短 UUID（`grant_id` 等）改完整 128-bit UUID | 防 msg_id 碰撞 |
-| **P0-07** | 共用 `bilogue_crypto.py` 統一 canonical JSON 簽名（`separators=(",",":")`）；relay / client / test 全部 import | 防止簽名 canonicalization 分歧 |
-| **P0-08** | `payload` 必須係 JSON object（唔接受 scalar / array / null） | 收窄 attack surface |
+| **P0-01** | Relay binds `127.0.0.1` by default; loud warning on non-loopback (LAN/Internet requires HTTPS) | No more default exposure on 0.0.0.0 |
+| **P0-02** | Kill-switch persisted (`relay_state.json`); stays STOPPED across restarts; new `POST /resume` (does not resurrect old grants) | Fixes "restart silently recovers" |
+| **P0-03** | Re-validation before approval (kill / both registered / ACL / signature / freshness / pending TTL) | Never approves expired/invalid messages |
+| **P0-04** | Approval binds to an immutable envelope hash; produces an independent `consent_id` | Prevents in-flight message swapping |
+| **P0-05** | Inbox changed from read-and-delete to delivery + ACK (`POST /messages/{aid}/{mid}/ack`) | Fixes "client crash loses messages" |
+| **P0-06** | All truncated UUIDs (`grant_id` etc.) replaced with full 128-bit UUIDs | Prevents msg_id collisions |
+| **P0-07** | Shared `bilogue_crypto.py` for canonical JSON signatures (`separators=(",",":")`); relay / client / tests all import it | Prevents signature canonicalization divergence |
+| **P0-08** | `payload` must be a JSON object (scalars / arrays / null rejected) | Narrows the attack surface |
 
-## v0.3.3 重要安全變更（Round-2 P1×8 + Round-3 P2×4）
+## Key security changes in v0.3.3 (Round-2 P1×8 + Round-3 P2×4)
 
-第三輪審計剩落嘅 12 項已全部實裝：
+The remaining 12 findings from the third audit round are all implemented:
 
-| ID | 變更 | 影響 |
+| ID | Change | Impact |
 |----|------|------|
-| **P1-01** | 非 loopback 綁定**必須 TLS**（`--tls-cert/--tls-key`），無 TLS 直接拒絕啟動（exit 3）；`--allow-insecure-lan` 可強行覆寫（唔推薦） | 消滅「明文 HTTP 暴露去 LAN」 |
-| **P1-02** | `POST /rotate-token` 輪換 admin token（舊 token 即時失效）；滑動窗口 rate-limit（send / admin / global，`BILOGUE_*_RATE` 可調） | token 泄露可止血；抗暴力破解 + DoS |
-| **P1-03** | audit / state 落磁碟用 Fernet 加密（`cryptography` 可用時），key 持久化並 0600；唔可用則明文 + 啟動警告 | 磁碟被讀都唔會直接見到 payload |
-| **P1-04** | client `bilogue_send.py` 支援 HTTPS、連線層重試 + backoff、錯誤分類（4xx 唔重試 / 5xx 重試） | 網路抖動唔再靜默丟訊息 |
-| **P1-05** | 消息級 TTL 可配置（`MSG_TTL_SECONDS`）；全局按 IP 限速 | 抗重放窗口收窄 + 全局 DoS 防護 |
-| **P1-06** | `POST /revoke` 會向 receiver inbox 推一條 `system` 撤銷通知 | 對方即時知 grant 已失效 |
-| **P1-07** | audit log 改 HMAC 鏈（`_audit_prev` / `_audit_hash`），篡改可定位到行號；`GET /audit/verify` | 審計紀錄可證明未被改 |
-| **P1-08** | 新增 `GET /healthz`（存活 + version + killed + 加密狀態）同 `GET /metrics`（pending / grants / undelivered / 限速計數） | 可觀測性 |
-| **P2-01** | nonce 重用檢測窗口由 ±300s 擴到 `NONCE_REPLAY_TTL`（≥3000s）+ LRU 上限 | 慢速重放都攔得住 |
-| **P2-02** | 對外 500 唔再洩漏異常類名；細節只留喺伺服器端 | 唔再畀攻擊者內部結構 |
-| **P2-03** | 所有可調參數集中喺 `CONFIG`，啟動時 `validate_config()` fail-closed（負值/非法即拒絕啟動） | 防配置錯誤靜默降級 |
-| **P2-04** | 新增 `fuzz_relay.py` 模糊測試（隨機/畸形/二進位/超大 body 打到全部端點） | 已修出並修復 2 類真 500 crash |
+| **P1-01** | Non-loopback binding **requires TLS** (`--tls-cert/--tls-key`); refuses to start without TLS (exit 3); `--allow-insecure-lan` can override (not recommended) | Eliminates "plaintext HTTP exposed to LAN" |
+| **P1-02** | `POST /rotate-token` rotates the admin token (old token dies instantly); sliding-window rate limits (send / admin / global, tunable via `BILOGUE_*_RATE`) | Token leaks can be stopped; brute-force + DoS resistance |
+| **P1-03** | Audit / state written to disk encrypted with Fernet (when `cryptography` is available), key persisted with 0600; plaintext + startup warning otherwise | Disk reads don't directly expose payloads |
+| **P1-04** | Client `bilogue_send.py` supports HTTPS, connection-level retry + backoff, error classification (no retry on 4xx / retry on 5xx) | Network jitter no longer silently drops messages |
+| **P1-05** | Configurable message-level TTL (`MSG_TTL_SECONDS`); global per-IP rate limiting | Narrower replay window + global DoS protection |
+| **P1-06** | `POST /revoke` pushes a `system` revocation notice to the receiver's inbox | Counterparty learns immediately that a grant died |
+| **P1-07** | Audit log is now an HMAC chain (`_audit_prev` / `_audit_hash`); tampering is localizable to a line number; `GET /audit/verify` | Audit records are provably untampered |
+| **P1-08** | New `GET /healthz` (liveness + version + killed + encryption state) and `GET /metrics` (pending / grants / undelivered / rate-limit counters) | Observability |
+| **P2-01** | Nonce reuse detection window widened from ±300s to `NONCE_REPLAY_TTL` (≥3000s) + LRU cap | Slow replays get caught too |
+| **P2-02** | External 500s no longer leak exception class names; details stay server-side | No more internal structure for attackers |
+| **P2-03** | All tunable parameters centralized in `CONFIG`; `validate_config()` fails closed at startup (negative/illegal values refuse to start) | Misconfiguration can't silently downgrade security |
+| **P2-04** | New `fuzz_relay.py` fuzzer (random/malformed/binary/oversized bodies against all endpoints) | Found and fixed 2 real 500-crash classes |
 
-## 項目結構
+## Project structure
 
 ```
 bilogue-protocol/
-├── hello_bilogue.py          # MVP：本地 in-memory demo（唔連 relay）
-├── bilogue_relay.py          # HTTP Relay Server v0.3.3（跨 agent）
-├── bilogue_crypto.py         # P0-07：共用 canonical JSON 簽名模組
-├── test_relay_security.py    # 安全 + Consent 回歸測試（99 項）
-├── fuzz_relay.py             # P2-04：模糊測試套件
-├── openclaw-bilogue/         # OpenClaw skill 整合
+├── hello_bilogue.py          # MVP: local in-memory demo (no relay)
+├── bilogue_relay.py          # HTTP Relay Server v0.3.3 (cross-agent)
+├── bilogue_crypto.py         # P0-07: shared canonical JSON signing module
+├── test_relay_security.py    # Security + Consent regression tests (99 tests)
+├── fuzz_relay.py             # P2-04: fuzzing suite
+├── openclaw-bilogue/         # OpenClaw skill integration
 │   ├── SKILL.md
 │   └── scripts/bilogue_send.py, bilogue_inbox.py
-├── app/index.html            # 架構可視化 landing page
-├── docs/                     # 營運 / 策略 / 測試紀錄
-├── SPEC.md                   # 協定規格
-├── SECURITY.md               # 安全審計與修復紀錄
-├── ROADMAP.md                # 行動路線圖
-└── 人肉Consent-Gate操作手册.md
+├── app/index.html            # Architecture visualization landing page
+├── docs/                     # Ops / strategy / test records
+├── SPEC.md                   # Protocol specification
+├── SECURITY.md               # Security audit and remediation records
+├── ROADMAP.md                # Action roadmap
+└── 人肉Consent-Gate操作手册.md  # No-code operation manual (Chinese)
 ```
 
-## 測試
+## Tests
 
 ```bash
-# 安全 + Consent 政策回歸（99 項）
+# Security + Consent policy regression (99 tests)
 python3 test_relay_security.py
 
-# 模糊測試（600 次畸形請求）
+# Fuzzing (600 malformed requests)
 python3 fuzz_relay.py --iters 600
 
-# 本地 demo（mock 模式）
+# Local demo (mock mode)
 python3 hello_bilogue.py --mock --auto-approve
 ```
 
-**測試結果**：
-- v0.3.3 安全 + Consent 政策回歸：**99/99 ✓**
-  （57 原有 SEC/L1/L2/L3/狀態機 + 19 項 P0-01~08 + 23 項 P1/P2）
-- v0.3.3 模糊測試：**600 次迭代，零 500、零 crash、`/healthz` 存活、audit 鏈 intact ✓**
+**Results**:
+- v0.3.3 security + Consent policy regression: **99/99 ✓**
+  (57 original SEC/L1/L2/L3/state-machine + 19 P0-01~08 + 23 P1/P2)
+- v0.3.3 fuzzing: **600 iterations, zero 500s, zero crashes, `/healthz` alive, audit chain intact ✓**
 
-## 文件
+## Docs
 
-- [SPEC.md](SPEC.md) — 協定規格（Envelope 格式 + 狀態機 + 安全機制）
-- [ROADMAP.md](ROADMAP.md) — 下一步行動計劃
-- [Bilogue_Strategy_Summary.md](Bilogue_Strategy_Summary.md) — 策略摘要
-- [人肉Consent-Gate操作手册.md](人肉Consent-Gate操作手册.md) — 零代碼操作手冊
+- [SPEC.md](SPEC.md) — protocol spec (envelope format + state machine + security)
+- [ROADMAP.md](ROADMAP.md) — next steps
+- [Bilogue_Strategy_Summary.md](Bilogue_Strategy_Summary.md) — strategy summary
+- [人肉Consent-Gate操作手册.md](人肉Consent-Gate操作手册.md) — no-code operation manual (Chinese)
+- [docs/why-agents-need-a-consent-layer.md](docs/why-agents-need-a-consent-layer.md) — design rationale: why agents need a consent layer
 
-## 設計理念
+## Design philosophy
 
-> 消費者 App（ChatGPT / Claude / Kimi / Gemini）互相之間沒有「直接對講」機制。但它們全部都有 API，所以兩個 AI 對話，今天已經只是「幾十行 code 的膠水」問題。
+> Consumer apps (ChatGPT / Claude / Kimi / Gemini) have no "direct line" between each other. But they all have APIs, so two AIs talking to each other is already just "a few dozen lines of glue code" today.
 
-> **Bilogue 的價值不是「令它變成可能」，而是把這些膠水標準化：地址（Agent ID）、身份（HMAC 簽名）、intent 格式（Envelope）、以及最重要的 Consent Gate（人類批准位）。**
+> **Bilogue's value isn't making it possible — it's standardizing the glue: addresses (Agent IDs), identity (HMAC signatures), intent format (envelopes), and most importantly the Consent Gate (the human approval point).**
 
 ## License
 
