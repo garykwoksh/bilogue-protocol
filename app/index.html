@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bilogue Protocol — AI 之間對話，每條訊息都經你批准</title>
+<meta name="description" content="Bilogue 係一個開源 AI-to-AI 通信協定：Agent ID、HMAC 簽名、Intent 狀態機，同埋最重要嘅 Consent Gate——人類批准位。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#000000;
+  --surface:#1a1a1a;
+  --surface-2:#181818;
+  --border:#242424;
+  --border-strong:#333333;
+  --text:#ffffff;
+  --text-80:#d9d9d9;
+  --text-60:#b3b3b3;
+  --text-40:#939393;
+  --accent-g:#47E27C;
+  --accent-c:#4ED3FB;
+  --green:#23a460;
+  --purple:#b350b3;
+  --blue:#0e6ebd;
+  --amber:#d4a724;
+  --red:#e5484d;
+  --ease:cubic-bezier(0.22,1,0.36,1);
+  --sans:'Inter','PingFang TC','PingFang SC','Microsoft JhengHei','Microsoft YaHei','Noto Sans CJK TC',sans-serif;
+  --disp:'Poppins','PingFang TC','PingFang SC','Microsoft JhengHei','Noto Sans CJK TC',sans-serif;
+  --mono:'JetBrains Mono','PingFang TC','PingFang SC','Noto Sans CJK TC',monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  background:var(--bg);
+  color:var(--text-60);
+  font-family:var(--sans);
+  font-size:17px;line-height:1.7;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+::selection{background:var(--accent-g);color:#000}
+a{color:var(--text-80);text-decoration:none;transition:color .2s ease}
+a:hover{color:var(--accent-g)}
+
+/* ---------- nav ---------- */
+nav{
+  position:fixed;top:0;left:0;right:0;z-index:100;
+  height:72px;display:flex;align-items:center;justify-content:space-between;
+  padding:0 5vw;
+  background:rgba(0,0,0,0.82);
+  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  border-bottom:1px solid transparent;
+  transition:border-color .2s ease;
+}
+nav.scrolled{border-bottom-color:var(--border)}
+.logo{font-family:var(--disp);font-weight:700;font-size:18px;color:var(--text);letter-spacing:.02em}
+.logo span{background:linear-gradient(90deg,var(--accent-g),var(--accent-c));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.nav-links{display:flex;gap:34px;font-size:14px;color:var(--text-40)}
+.nav-links a{color:var(--text-40)}
+.nav-links a:hover{color:var(--text)}
+.nav-cta{
+  font-family:var(--mono);font-size:13px;
+  padding:9px 18px;border:1px solid var(--border-strong);border-radius:5px;
+  color:var(--text-80);
+}
+.nav-cta:hover{border-color:var(--accent-g);color:var(--accent-g)}
+
+/* ---------- hero ---------- */
+.hero{
+  min-height:100vh;
+  display:grid;grid-template-columns:1.05fr 0.95fr;gap:5vw;align-items:center;
+  padding:140px 5vw 100px;
+  position:relative;
+}
+.hero::before{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:
+    radial-gradient(ellipse 60% 45% at 75% 20%, rgba(78,211,251,0.07), transparent 70%),
+    radial-gradient(ellipse 50% 40% at 15% 80%, rgba(71,226,124,0.05), transparent 70%);
+}
+.eyebrow{
+  font-family:var(--mono);font-size:12px;letter-spacing:.28em;
+  color:var(--accent-g);text-transform:uppercase;margin-bottom:26px;
+  display:flex;align-items:center;gap:12px;
+}
+.eyebrow::before{content:"";width:34px;height:1px;background:var(--accent-g)}
+h1{
+  font-family:var(--disp);
+  font-size:clamp(40px,5.2vw,76px);
+  font-weight:800;line-height:1.12;color:var(--text);
+  letter-spacing:-0.02em;margin-bottom:28px;
+}
+h1 .grad{
+  background:linear-gradient(92deg,var(--accent-g) 10%,var(--accent-c) 90%);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+}
+.hero-sub{font-size:18px;max-width:520px;margin-bottom:40px;color:var(--text-60)}
+.hero-sub b{color:var(--text-80);font-weight:600}
+.hero-sub code{font-family:var(--mono);font-size:15px;color:var(--accent-c)}
+.hero-ctas{display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+.btn-primary{
+  font-family:var(--mono);font-size:14px;font-weight:500;
+  background:linear-gradient(180deg,#fff,#a7b7c1);color:#000;
+  padding:14px 26px;border-radius:5px;
+  box-shadow:0 10px 24px rgba(0,0,0,.45);
+  transition:transform .3s var(--ease),box-shadow .3s var(--ease);
+  display:inline-block;
+}
+.btn-primary:hover{transform:translateY(-2px);color:#000;box-shadow:0 16px 32px rgba(0,0,0,.5)}
+.btn-ghost{
+  position:relative;font-family:var(--mono);font-size:14px;
+  padding:14px 26px;border-radius:5px;color:var(--text-80);
+  border:1px solid var(--border-strong);
+  overflow:hidden;transition:color .3s ease;
+}
+.btn-ghost::before{
+  content:"";position:absolute;inset:-2px;border-radius:7px;padding:1px;
+  background:conic-gradient(from var(--a,0deg),#47E27C,#4ED3FB,#b350b3,#47E27C);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask-composite:exclude;
+  opacity:0;transition:opacity .3s ease;
+}
+@property --a{syntax:"<angle>";initial-value:0deg;inherits:false}
+.btn-ghost:hover{color:var(--text)}
+.btn-ghost:hover::before{opacity:1;animation:spin 1.2s linear infinite}
+@keyframes spin{to{--a:360deg}}
+.hero-meta{
+  margin-top:56px;display:flex;gap:34px;flex-wrap:wrap;
+  font-family:var(--mono);font-size:12.5px;color:var(--text-40);
+}
+.hero-meta b{color:var(--text-80);font-weight:500}
+
+/* ---------- 3D terminal ---------- */
+.term-wrap{perspective:1500px}
+.term{
+  transform:rotateY(-14deg) rotateX(4deg);
+  transform-style:preserve-3d;
+  background:var(--surface);
+  border:1px solid var(--border-strong);
+  border-radius:10px;
+  box-shadow:0 40px 80px rgba(0,0,0,.6),0 10px 24px rgba(0,0,0,.4);
+  overflow:hidden;
+  transition:transform .6s var(--ease);
+  position:relative;
+}
+.term::after{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.04) 45%,transparent 60%);
+}
+.term-wrap:hover .term{transform:rotateY(-6deg) rotateX(2deg)}
+.term-bar{
+  display:flex;align-items:center;gap:8px;
+  padding:13px 16px;border-bottom:1px solid var(--border);
+  background:var(--surface-2);
+}
+.term-bar i{width:11px;height:11px;border-radius:50%;display:block}
+.term-bar i:nth-child(1){background:#ff5f57}
+.term-bar i:nth-child(2){background:#febc2e}
+.term-bar i:nth-child(3){background:#28c840}
+.term-bar span{
+  margin-left:10px;font-family:var(--mono);font-size:11.5px;color:var(--text-40);
+}
+.term-body{
+  padding:22px 20px 26px;
+  font-family:var(--mono);font-size:12.8px;line-height:1.9;
+  min-height:380px;color:var(--text-60);
+  white-space:pre-wrap;word-break:break-all;
+}
+.term-body .c-dim{color:var(--text-40)}
+.term-body .c-g{color:var(--accent-g)}
+.term-body .c-c{color:var(--accent-c)}
+.term-body .c-a{color:var(--amber)}
+.term-body .c-r{color:var(--red)}
+.term-body .c-w{color:var(--text)}
+.cursor{display:inline-block;width:8px;height:15px;background:var(--accent-g);vertical-align:-2px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+
+/* ---------- skew dividers ---------- */
+.skew{transform:skewY(-2.5deg);position:relative}
+.skew>.inner{transform:skewY(2.5deg)}
+section{position:relative}
+.section-pad{padding:110px 5vw}
+.alt{background:var(--surface-2);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+
+.section-head{max-width:720px;margin-bottom:64px}
+.kicker{
+  font-family:var(--mono);font-size:12px;letter-spacing:.26em;
+  text-transform:uppercase;color:var(--text-40);margin-bottom:18px;
+}
+h2{
+  font-family:var(--disp);font-size:clamp(30px,3.4vw,46px);
+  font-weight:700;color:var(--text);letter-spacing:-0.01em;line-height:1.2;
+  margin-bottom:18px;
+}
+.section-head p{font-size:16.5px;color:var(--text-60)}
+
+/* ---------- 四層 feature rows ---------- */
+.layers{display:flex;flex-direction:column}
+.layer{
+  display:grid;grid-template-columns:90px 1fr 1.2fr;gap:4vw;align-items:baseline;
+  padding:34px 0;border-top:1px solid var(--border);
+}
+.layer:last-child{border-bottom:1px solid var(--border)}
+.layer .num{
+  font-family:var(--mono);font-size:13px;color:var(--text-40);
+}
+.layer h3{
+  font-family:var(--disp);font-size:22px;font-weight:600;color:var(--text);
+  padding-left:16px;
+}
+.layer:nth-child(1) h3{border-left:2px solid var(--accent-g)}
+.layer:nth-child(2) h3{border-left:2px solid var(--accent-c)}
+.layer:nth-child(3) h3{border-left:2px solid var(--purple)}
+.layer:nth-child(4) h3{border-left:2px solid var(--amber)}
+.layer p{font-size:15.5px}
+.layer p code{font-family:var(--mono);font-size:13.5px;color:var(--accent-c)}
+
+/* ---------- consent tiers ---------- */
+.tiers{display:flex;flex-direction:column;gap:18px}
+.tier{
+  display:grid;grid-template-columns:120px 1fr 1.1fr;gap:3.5vw;align-items:center;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:5px;padding:30px 34px;
+  transition:border-color .3s ease,transform .3s var(--ease);
+}
+.tier:hover{border-color:var(--border-strong);transform:translateX(6px)}
+.tier .lvl{font-family:var(--disp);font-size:30px;font-weight:800}
+.tier:nth-child(1) .lvl{color:var(--text)}
+.tier:nth-child(2) .lvl{color:var(--accent-c)}
+.tier:nth-child(3) .lvl{color:var(--accent-g)}
+.tier h3{font-size:18px;font-weight:600;color:var(--text);margin-bottom:6px}
+.tier .desc{font-size:15px}
+.tier .code{
+  font-family:var(--mono);font-size:12.5px;color:var(--text-40);
+  background:var(--bg);border:1px solid var(--border);border-radius:5px;
+  padding:14px 16px;line-height:1.8;
+}
+.tier .code em{color:var(--accent-g);font-style:normal}
+
+/* ---------- state machine ---------- */
+.machine{
+  font-family:var(--mono);font-size:clamp(11px,1.5vw,14.5px);line-height:2.1;
+  background:var(--surface);border:1px solid var(--border);border-radius:10px;
+  padding:40px 5vw;overflow-x:auto;color:var(--text-60);
+  box-shadow:0 20px 50px rgba(0,0,0,.4);
+}
+.machine .k{color:var(--text);font-weight:700}
+.machine .a{color:var(--accent-g)}
+.machine .x{color:var(--red)}
+.machine .d{color:var(--text-40)}
+
+/* ---------- security ---------- */
+.sec-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:5px;overflow:hidden}
+.sec-cell{background:var(--bg);padding:38px 30px}
+.sec-cell .big{
+  font-family:var(--disp);font-size:44px;font-weight:800;
+  background:linear-gradient(92deg,var(--accent-g),var(--accent-c));
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+  margin-bottom:10px;
+}
+.sec-cell .lbl{font-size:14px;color:var(--text-40);line-height:1.6}
+.sec-cell .lbl b{color:var(--text-80);font-weight:600}
+
+/* ---------- ecosystem ---------- */
+.eco{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center}
+.eco-quote{
+  border-left:2px solid var(--accent-g);padding:6px 0 6px 26px;
+  font-size:19px;color:var(--text-80);line-height:1.75;
+}
+.eco-quote b{color:var(--text)}
+.eco-list{font-size:15.5px;display:flex;flex-direction:column;gap:14px}
+.eco-list div{display:flex;gap:14px}
+.eco-list .tag{
+  font-family:var(--mono);font-size:12px;color:var(--accent-c);
+  min-width:86px;padding-top:3px;
+}
+
+/* ---------- quickstart ---------- */
+.qs{
+  background:var(--surface);border:1px solid var(--border-strong);
+  border-radius:10px;overflow:hidden;
+  box-shadow:0 20px 50px rgba(0,0,0,.4);
+}
+.qs-head{
+  padding:12px 18px;border-bottom:1px solid var(--border);
+  font-family:var(--mono);font-size:12px;color:var(--text-40);
+  display:flex;justify-content:space-between;
+}
+.qs-body{padding:26px 24px;font-family:var(--mono);font-size:13.5px;line-height:2.05;color:var(--text-60);overflow-x:auto}
+.qs-body .cm{color:var(--text-40)}
+.qs-body .cmd{color:var(--text)}
+.qs-body .hl{color:var(--accent-g)}
+
+/* ---------- roadmap ---------- */
+.road{display:grid;grid-template-columns:repeat(6,1fr);gap:14px}
+.mile{
+  border-top:2px solid var(--border-strong);padding-top:18px;
+  transition:border-color .3s ease;
+}
+.mile:hover{border-top-color:var(--accent-g)}
+.mile .m{font-family:var(--mono);font-size:12px;color:var(--accent-g);margin-bottom:10px}
+.mile h4{font-size:15px;font-weight:600;color:var(--text);margin-bottom:8px}
+.mile p{font-size:12.8px;color:var(--text-40);line-height:1.65}
+
+/* ---------- final cta ---------- */
+.final{text-align:center;padding:140px 5vw}
+.final h2{font-size:clamp(34px,4.4vw,60px);margin-bottom:24px}
+.final p{max-width:560px;margin:0 auto 44px;font-size:17px}
+footer{
+  border-top:1px solid var(--border);padding:34px 5vw;
+  display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px;
+  font-family:var(--mono);font-size:12px;color:var(--text-40);
+}
+
+/* ---------- reveal ---------- */
+.rv{opacity:0;transform:translateY(26px);transition:opacity .8s var(--ease),transform .8s var(--ease)}
+.rv.on{opacity:1;transform:none}
+
+@media (max-width:1000px){
+  .hero{grid-template-columns:1fr;padding-top:120px;gap:70px}
+  .term{transform:rotateY(-8deg)}
+  .layer{grid-template-columns:60px 1fr}
+  .layer p{grid-column:2}
+  .tier{grid-template-columns:1fr;gap:18px}
+  .sec-grid{grid-template-columns:1fr}
+  .eco{grid-template-columns:1fr}
+  .road{grid-template-columns:repeat(2,1fr)}
+  .nav-links{display:none}
+}
+</style>
+</head>
+<body>
+
+<nav id="nav">
+  <div class="logo">Bilogue<span> Protocol</span></div>
+  <div class="nav-links">
+    <a href="#layers">協定四層</a>
+    <a href="#consent">Consent 三級</a>
+    <a href="#security">安全</a>
+    <a href="#quickstart">Quickstart</a>
+    <a href="#roadmap">Roadmap</a>
+  </div>
+  <a class="nav-cta" href="#quickstart">→ GitHub</a>
+</nav>
+
+<!-- ================= HERO ================= -->
+<section class="hero">
+  <div>
+    <div class="eyebrow">Open-source · AI-to-AI Protocol</div>
+    <h1>AI 之間對話，<br><span class="grad">每條訊息</span>都經你批准。</h1>
+    <p class="hero-sub">
+      Bilogue 將 AI-to-AI 通信嘅膠水標準化：<b>Agent ID</b> 係電話號碼、<b>HMAC 簽名</b>係身份、
+      <b>Intent Envelope</b> 係格式——而最重要嘅係 <b>Consent Gate</b>，
+      一個真正攔得住訊息嘅人類批准位。轉 model 唔使換號碼。
+    </p>
+    <div class="hero-ctas">
+      <a class="btn-primary" href="#quickstart">開始使用 →</a>
+      <a class="btn-ghost" href="#consent">Consent Gate 點運作</a>
+    </div>
+    <div class="hero-meta">
+      <div><b>57/57</b> 安全回歸測試</div>
+      <div><b>SEC-01–20</b> 兩輪審計修復</div>
+      <div><b>MIT</b> License</div>
+      <div><b>Python 3.8+</b> 零依賴</div>
+    </div>
+  </div>
+
+  <div class="term-wrap">
+    <div class="term">
+      <div class="term-bar"><i></i><i></i><i></i><span>bilogue-relay — 兩個 AI，一次批准</span></div>
+      <div class="term-body" id="termBody"><span class="cursor"></span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 四層 ================= -->
+<section class="section-pad alt skew" id="layers">
+  <div class="inner">
+    <div class="section-head rv">
+      <div class="kicker">The Glue, Standardized</div>
+      <h2>兩個 AI 對話，今日只係幾十行膠水。<br>Bilogue 將佢分成四層標準。</h2>
+      <p>消費者 AI 之間冇「直接對講」機制，但佢哋全部都有 API。Bilogue 嘅價值唔係「令佢變成可能」，而係將地址、身份、格式、批准呢四樣嘢標準化。</p>
+    </div>
+    <div class="layers rv">
+      <div class="layer">
+        <div class="num">01</div>
+        <h3>Identity</h3>
+        <p><code>Agent ID + HMAC-SHA256</code> 簽名。ACL 認 ID 唔認模型——轉 model 等於換引擎，電話號碼唔使換。簽名 key 同 inbox 讀取 token 分離。</p>
+      </div>
+      <div class="layer">
+        <div class="num">02</div>
+        <h3>Intent</h3>
+        <p>Intent Envelope：<code>DELEGATE → PROPOSE → ACCEPT → REPORT</code>。狀態機喺 relay 層強制執行，非法轉移即 <code>400 BAD_STATE</code>。</p>
+      </div>
+      <div class="layer">
+        <div class="num">03</div>
+        <h3>Consent</h3>
+        <p>每條外部訊息彈出人類批准位；未批准嘅訊息<b>收件人根本睇唔到</b>。三級政策俾你喺安全同流暢之間揀平衡（下述）。</p>
+      </div>
+      <div class="layer">
+        <div class="num">04</div>
+        <h3>Audit</h3>
+        <p>JSONL append-only 審計日誌，連被拒嘅嘗試都記低。按大小自動 rotation，出事有得查。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= CONSENT 三級 ================= -->
+<section class="section-pad skew" id="consent">
+  <div class="inner">
+    <div class="section-head rv">
+      <div class="kicker">Consent Gate · Three Tiers</div>
+      <h2>逐條批，批到癲；<br>全放行，放到驚。所以有三級。</h2>
+      <p>批准疲勞係安全漏洞——撳得太多，人類就會唔睇內容照撳。Bilogue 俾你按信任程度揀粒度，每次批准都更有意義。</p>
+    </div>
+    <div class="tiers rv">
+      <div class="tier">
+        <div class="lvl">L1</div>
+        <div>
+          <h3>逐條訊息批准</h3>
+          <p class="desc">預設、最嚴。每個 envelope 停喺批准位，人類睇完內容先放行。新 agent、敏感任務用呢級。</p>
+        </div>
+        <div class="code">202 PENDING_APPROVAL
+<em>→ POST /approve {"msg_id": "…"}</em></div>
+      </div>
+      <div class="tier">
+        <div class="lvl">L2</div>
+        <div>
+          <h3>對話鏈同意</h3>
+          <p class="desc">批准一個任務，佢嘅後續 PROPOSE/ACCEPT/REPORT 自動放行。鏈斷咗（新話題）即刻跌返 L1。每鏈上限 50 條 / 1 小時。</p>
+        </div>
+        <div class="code">approve 時加 <em>"scope": "conversation"</em>
+v0.3.1 起預設係 <em>"once"</em>（最小權限）</div>
+      </div>
+      <div class="tier">
+        <div class="lvl">L3</div>
+        <div>
+          <h3>限時信任窗口</h3>
+          <p class="desc">一對 agent 喺限期 + 訊息預算內自由通訊。TTL 上限 24 小時，隨時 <code style="font-family:var(--mono)">/revoke</code> 撤回。重啟即清零——fail-closed。</p>
+        </div>
+        <div class="code"><em>POST /grant</em> {"agent_a":"claw-a",
+  "agent_b":"claw-b","ttl_seconds":3600,
+  "max_messages":100}</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 狀態機 ================= -->
+<section class="section-pad alt">
+  <div class="section-head rv">
+    <div class="kicker">Intent State Machine · Enforced</div>
+    <h2>唔係文件寫住嘅規矩，係 relay 會擋嘅規矩。</h2>
+  </div>
+  <div class="machine rv"><span class="d"># 合法轉移（v0.3.1 起強制執行）</span>
+<span class="k">QUERY</span>    <span class="a">→</span> REPORT / ACCEPT / REJECT
+<span class="k">DELEGATE</span> <span class="a">→</span> PROPOSE / ACCEPT / REJECT / REPORT
+<span class="k">PROPOSE</span>  <span class="a">→</span> ACCEPT / REJECT
+<span class="k">ACCEPT</span>   <span class="a">→</span> REPORT
+<span class="k">REJECT</span>   <span class="a">→</span> QUERY / DELEGATE   <span class="d"># 重新開始</span>
+<span class="k">REPORT</span>   <span class="a">→</span> QUERY / DELEGATE   <span class="d"># 任務完結，開新話題</span>
+<span class="k">PING</span>     <span class="a">→</span> REPORT
+
+<span class="x">✗ REPORT → PROPOSE        400 BAD_STATE（實測攔截）</span>
+<span class="x">✗ 無 in_reply_to 嘅 REPORT  400 BAD_STATE（實測攔截）</span></div>
+</section>
+
+<!-- ================= 安全 ================= -->
+<section class="section-pad" id="security">
+  <div class="section-head rv">
+    <div class="kicker">Security Posture</div>
+    <h2>兩輪外部式審計，20 項發現，全部修復兼附測試。</h2>
+    <p>每一項發現都用 PoC 實測確認先修，修完有回歸測試守住。SECURITY.md 如實列明未解決嘅限制（TLS、rate limiting 等）。</p>
+  </div>
+  <div class="sec-grid rv">
+    <div class="sec-cell"><div class="big">20</div><div class="lbl"><b>SEC-01 ~ SEC-20</b><br>含 4 項高危：secret 洩漏、Consent Gate 掉包、inbox 繞過、狀態機缺失</div></div>
+    <div class="sec-cell"><div class="big">57/57</div><div class="lbl"><b>安全回歸測試</b><br>每項修復都有對應測試，跑一個 script 就知道有冇翻發</div></div>
+    <div class="sec-cell"><div class="big">1 MB</div><div class="lbl"><b>Request body 上限</b><br>連線 timeout、線程槽上限、nonce TTL——資源耗盡類攻擊全堵</div></div>
+    <div class="sec-cell"><div class="big">409</div><div class="lbl"><b>待批准訊息防掉包</b><br>重複 msg_id 拒絕覆寫；重複註冊唔會洩漏現有 secret</div></div>
+    <div class="sec-cell"><div class="big">0</div><div class="lbl"><b>批准前洩漏</b><br>pending / 被拒訊息只落 audit log，唔入收件隊列</div></div>
+    <div class="sec-cell"><div class="big">2 keys</div><div class="lbl"><b>簽名 key ≠ inbox token</b><br>職責分離，constant-time 比較，防 timing attack</div></div>
+  </div>
+</section>
+
+<!-- ================= 生態 ================= -->
+<section class="section-pad alt">
+  <div class="eco rv">
+    <div class="eco-quote">
+      A2A 解決「agent 點搵到彼此」，MCP 解決「agent 點用工具」。
+      <b>Bilogue 解決佢哋都冇解決嘅嘢：每一條跨 agent 訊息，人類喺邊度話事。</b>
+    </div>
+    <div class="eco-list">
+      <div><span class="tag">MCP</span><span>agent ↔ 工具嘅垂直層（Anthropic，Linux Foundation）——互補，唔係對手</span></div>
+      <div><span class="tag">A2A</span><span>agent ↔ agent 嘅水平層（Google）——Bilogue 定位做佢上面嘅 consent / audit 層</span></div>
+      <div><span class="tag">ANP</span><span>DID 去中心化身份——同 Bilogue 嘅「Agent ID 係電話號碼」理念相通</span></div>
+      <div><span class="tag">OpenClaw</span><span>官方 skill 已備：兩個 OpenClaw 實例裝上即經 relay 對話</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= QUICKSTART ================= -->
+<section class="section-pad" id="quickstart">
+  <div class="section-head rv">
+    <div class="kicker">Quickstart</div>
+    <h2>一條命令，睇晒成個流程。</h2>
+  </div>
+  <div class="qs rv">
+    <div class="qs-head"><span>terminal</span><span>python 3.8+ · 零依賴</span></div>
+    <div class="qs-body"><span class="cm"># 起 relay（Consent Gate 開住）</span>
+<span class="cmd">python3 bilogue_relay.py --port 8420</span>
+
+<span class="cm"># 註冊兩個 agent + 雙向授權</span>
+<span class="cmd">curl -X POST localhost:8420/register -H <span class="hl">"Authorization: Bearer $ADMIN"</span> \
+  -d '{"agent_id":"claw-a"}'</span>
+<span class="cmd">curl -X POST localhost:8420/allow -H <span class="hl">"Authorization: Bearer $ADMIN"</span> \
+  -d '{"agent_a":"claw-a","agent_b":"claw-b"}'</span>
+
+<span class="cm"># 跑 57 項安全 + Consent 回歸測試</span>
+<span class="cmd">python3 test_relay_security.py</span>  <span class="hl"># 57 passed, 0 failed</span></div>
+  </div>
+</section>
+
+<!-- ================= ROADMAP ================= -->
+<section class="section-pad alt" id="roadmap">
+  <div class="section-head rv">
+    <div class="kicker">Six-month Roadmap</div>
+    <h2>頭三個月，零成本。</h2>
+  </div>
+  <div class="road rv">
+    <div class="mile"><div class="m">M1</div><h4>內部鞏固</h4><p>v0.3.1 已完成。補齊 CONTRIBUTING / CoC / CI（GitHub Actions + CodeQL）</p></div>
+    <div class="mile"><div class="m">M2</div><h4>公開發佈</h4><p>Repo 轉 public、呢個 landing page 上 GitHub Pages、TLS 部署指南、Docker</p></div>
+    <div class="mile"><div class="m">M3</div><h4>社群定位</h4><p>「Bilogue vs A2A/MCP」對比文、Show HN、envelope 對齊評估</p></div>
+    <div class="mile"><div class="m">M4</div><h4>v0.4</h4><p>持久化 registry、rate limiting 文件化、域名 + demo 機（~$100/年）</p></div>
+    <div class="mile"><div class="m">M5</div><h4>第三方審計</h4><p>申請 OSTIF 免費開源審計、Alpha-Omega / OpenSSF 資助、開 VDP</p></div>
+    <div class="mile"><div class="m">M6</div><h4>v1.0 決議</h4><p>審計跟進、A2A 兼容層評估、GitHub Sponsors</p></div>
+  </div>
+</section>
+
+<!-- ================= FINAL ================= -->
+<section class="final">
+  <div class="rv">
+    <div class="kicker" style="justify-content:center;display:flex">Experimental · Not audited for production</div>
+    <h2>AI 會越傾越多。<br>批准位要企得穩。</h2>
+    <p>Star 個 repo、跑個 demo、或者將 Consent Gate 嘅概念帶入你自己嘅 agent 棧。</p>
+    <div class="hero-ctas" style="justify-content:center">
+      <a class="btn-primary" href="#quickstart">去 GitHub 睇代碼 →</a>
+      <a class="btn-ghost" href="#security">睇安全審計</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <span>Bilogue Protocol · MIT License · v0.3.1</span>
+  <span>模型係引擎，Agent ID 係電話號碼。</span>
+</footer>
+
+<script>
+// ---- nav border on scroll ----
+const nav = document.getElementById('nav');
+addEventListener('scroll', () => nav.classList.toggle('scrolled', scrollY > 8), {passive:true});
+
+// ---- reveal on scroll ----
+const io = new IntersectionObserver(es => es.forEach(e => {
+  if (e.isIntersecting) { e.target.classList.add('on'); io.unobserve(e.target); }
+}), {threshold: .12});
+document.querySelectorAll('.rv').forEach(el => io.observe(el));
+
+// ---- terminal typing demo（真實測試 transcript）----
+const lines = [
+  ['c-dim', '$ python3 bilogue_relay.py --port 8420'],
+  ['c-w',    '  Bilogue Relay Server v0.3.1 啟動 ✓'],
+  ['', ''],
+  ['c-w',    '  karina → stfund  [DELEGATE]  「Q3 財務覆核」'],
+  ['c-a',    '  [GATE] 202 PENDING_APPROVAL — 等緊人類批准…'],
+  ['c-dim',  '  # 人類睇完內容 → approve {"scope":"conversation"}'],
+  ['c-g',    '  [APPROVE] 已批准轉發 ✓'],
+  ['', ''],
+  ['c-c',    '  stfund → karina  [PROPOSE]（對話鏈放行，唔使再批）'],
+  ['c-c',    '  karina → stfund  [ACCEPT]（對話鏈放行）'],
+  ['c-c',    '  stfund → karina  [REPORT]（對話鏈放行）'],
+  ['', ''],
+  ['c-r',    '  ✗ stfund 偷走 PROPOSE → 400 BAD_STATE 已拒絕'],
+  ['c-g',    '  1 次批准，4 條訊息，成單任務傾掂。'],
+];
+const body = document.getElementById('termBody');
+let li = 0;
+function playTerm() {
+  body.innerHTML = '';
+  li = 0;
+  const tick = setInterval(() => {
+    if (li >= lines.length) {
+      clearInterval(tick);
+      setTimeout(playTerm, 6000);
+      return;
+    }
+    const [cls, text] = lines[li++];
+    const div = document.createElement('div');
+    if (cls) div.className = cls;
+    div.textContent = text || '\u00a0';
+    body.appendChild(div);
+    const c = document.createElement('span');
+    c.className = 'cursor';
+    body.appendChild(c);
+    const prev = body.querySelectorAll('.cursor');
+    prev.forEach((n, i) => { if (i < prev.length - 1) n.remove(); });
+  }, 620);
+}
+playTerm();
+</script>
+</body>
+</html>
